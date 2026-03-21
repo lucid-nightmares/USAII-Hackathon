@@ -19,8 +19,9 @@ const mono = IBM_Plex_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "SignalSafe",
-  description: "Explainable AI coaching for safer digital conversations.",
+  title: "SignalSafe Guardian Network",
+  description:
+    "A privacy-respecting guardian operations console for parents of younger children, with redacted alerts and immediate escalation paths.",
 };
 
 export default function RootLayout({

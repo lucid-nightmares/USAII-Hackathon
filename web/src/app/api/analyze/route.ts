@@ -32,7 +32,7 @@ const tacticRules: TacticRule[] = [
     weight: 18,
     severity: "critical",
     explanation: "The speaker is trying to hide the interaction from a guardian.",
-    patterns: [/don't tell/i, /keep this secret/i, /between us/i, /your parents don't see/i],
+    patterns: [/don't tell/i, /dont tell/i, /keep this secret/i, /between us/i, /your parents don't see/i],
   },
   {
     id: "isolation",
@@ -40,7 +40,7 @@ const tacticRules: TacticRule[] = [
     weight: 14,
     severity: "watch",
     explanation: "The speaker frames adults or trusted people as blockers.",
-    patterns: [/adults always ruin/i, /don't involve/i, /just trust me/i, /your dad/i],
+    patterns: [/adults always ruin/i, /don't involve/i, /dont involve/i, /just trust me/i, /your dad/i],
   },
   {
     id: "urgency",
@@ -93,6 +93,7 @@ function redact(hit: string) {
   if (trimmed.length <= 10) {
     return trimmed;
   }
+
   return `${trimmed.slice(0, 6)}…${trimmed.slice(-4)}`;
 }
 
@@ -125,6 +126,7 @@ export async function POST(request: Request) {
               .flatMap((pattern) => event.text.match(pattern) ?? [])
               .map((match) => redact(match)),
           );
+
           return hits.length > 0 ? { rule, hits } : null;
         })
         .filter((item): item is { rule: TacticRule; hits: string[] } => item !== null);
@@ -136,35 +138,37 @@ export async function POST(request: Request) {
       const score = matchedRules.reduce((sum, item) => sum + item.rule.weight, 0);
       const severity = severityFromScore(score);
       const evidence = matchedRules.flatMap((item) => item.hits);
-      const tacticNames = matchedRules.map((item) => item.rule.label.toLowerCase());
+      const matchedTactics = matchedRules.map((item) => item.rule.label);
+      const actionPlan =
+        severity === "critical"
+          ? [
+              "Open a calm guardian check-in immediately.",
+              "Confirm whether the child should stop using the app for now.",
+              "Escalate to the backup guardian if the primary misses the acknowledgement window.",
+            ]
+          : [
+              "Review the redacted evidence with context from the child.",
+              "Watch for repeated contact or repeated reward pressure.",
+              "Adjust the app policy or contact permissions if the pattern continues.",
+            ];
 
       return {
         id: event.id,
         severity,
         title:
           severity === "critical"
-            ? "Immediate guardian check recommended"
-            : "Review this interaction",
+            ? "Immediate guardian review recommended"
+            : "Interaction needs parent review",
         score,
-        summary: `${event.app} triggered ${tacticNames.join(", ")} in a way that merits guardian review.`,
+        summary: `${event.app} triggered ${matchedTactics.join(", ")} and should be routed through the parent console.`,
         evidence,
         channels:
           severity === "critical"
-            ? ["Push now", "SMS in 5 min", "Second guardian in 10 min"]
+            ? ["Push now", "SMS in 5 min", "Backup guardian in 10 min"]
             : ["Push digest", "Email summary"],
-        actionPlan:
-          severity === "critical"
-            ? [
-                "Open the child check-in flow immediately.",
-                "Confirm whether the app should be locked temporarily.",
-                "Review the app-specific safety setting and report if needed.",
-              ]
-            : [
-                "Review the conversation summary.",
-                "Ask a calm follow-up question.",
-                "Watch for repeated behavior from the same app or contact.",
-              ],
+        actionPlan,
         app: event.app,
+        matchedTactics,
       };
     })
     .filter((alert): alert is NonNullable<typeof alert> => alert !== null)
@@ -172,6 +176,20 @@ export async function POST(request: Request) {
 
   const overallScore = alerts.reduce((sum, alert) => sum + alert.score, 0);
   const overallRisk = severityFromScore(overallScore);
+  const queuedAlerts = alerts.filter((alert) => alert.severity !== "info").length;
+
+  const deliveryPlan =
+    overallRisk === "critical"
+      ? {
+          primary: "Primary guardian push is armed immediately with the child name, app, and redacted evidence packet.",
+          backup: "Fallback SMS activates after 5 minutes if the guardian has not acknowledged the incident.",
+          escalation: "A second guardian and summary email receive the packet after 10 minutes or on manual escalation.",
+        }
+      : {
+          primary: "The guardian app feed receives the incident in the active review queue.",
+          backup: "Email backup stores the review packet for later follow-up.",
+          escalation: "Escalation stays idle unless the same tactic repeats on the same device.",
+        };
 
   const response = {
     childName,
@@ -183,32 +201,25 @@ export async function POST(request: Request) {
         : "No guardian intervention is recommended right now.",
     guardianDigest:
       alerts.length > 0
-        ? `${childName}'s device found ${alerts.length} risky interaction${alerts.length > 1 ? "s" : ""}. Raw text stayed local; only redacted phrases and incident summaries were sent to the dashboard.`
-        : `${childName}'s device scanned recent activity and found no incidents that crossed the guardian threshold.`,
+        ? `${childName}'s device produced ${alerts.length} redacted incident packet${alerts.length > 1 ? "s" : ""}. Full chat text stayed local; the parent console only received the minimum evidence needed to react quickly.`
+        : `${childName}'s recent activity stayed below the guardian threshold. No alert packet was routed off-device.`,
     alerts,
     privacyNotes: [
-      "Raw text stays on-device by default.",
-      "Only redacted evidence snippets are synced to guardians.",
-      "Parents can require explicit unlock before viewing additional context.",
+      "Raw text remains on-device unless a guardian unlocks more detail.",
+      "Only redacted phrase fragments and risk metadata sync to the console.",
+      "Guardian actions and escalation state are logged for family coordination.",
     ],
     dashboardStats: {
       processed: String(events.length),
       flagged: String(alerts.length),
       redacted: String(alerts.reduce((sum, alert) => sum + alert.evidence.length, 0)),
-      queued: String(alerts.filter((alert) => alert.severity !== "info").length),
+      queued: String(queuedAlerts),
     },
-    deliveryPlan:
+    deliveryPlan,
+    recommendation:
       overallRisk === "critical"
-        ? {
-            primary: "Push the alert instantly to the primary guardian app.",
-            backup: "Send SMS if the push is not acknowledged in 5 minutes.",
-            escalation: "Route the incident to a second guardian and email a summary packet.",
-          }
-        : {
-            primary: "Bundle the alert into the guardian app feed.",
-            backup: "Email the summary for later review.",
-            escalation: "Escalate only if the same pattern repeats.",
-          },
+        ? "For younger kids, the safest default is to notify the primary guardian immediately, preserve the transcript locally, and make escalation fast if the first alert is missed."
+        : "Keep the evidence packet narrow and give the parent context without normalizing full-time transcript surveillance.",
   };
 
   return NextResponse.json(response);

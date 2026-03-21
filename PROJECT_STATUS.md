@@ -6,28 +6,29 @@ Date: 2026-03-21
 USAII Global AI Hackathon 2026
 
 ## Current concept
-SignalSafe Guardian Console
+SignalSafe Guardian Network
 
-A privacy-respecting child safety system for parents of kids 10 and under. The child device scans locally, creates redacted incident packets, and sends only guardian-grade alerts to a parent dashboard with push/SMS/email escalation planning.
+A privacy-respecting child safety product for parents of kids 10 and under. Child devices scan locally, create redacted incident packets, and route only the minimum necessary alert data to a guardian command console with push, SMS, and backup-guardian escalation.
 
 ## Current product shape
-- Parent dashboard for multiple child devices
-- Redacted evidence summaries instead of full transcript upload
-- Immediate notification routing for critical incidents
-- Policy studio concept for thresholds and guardian escalation
-- Deployment flow showing how the product would be installed and operated
+- Multi-child guardian fleet with device-specific install profiles
+- Incident command dashboard with alert queue and parent response actions
+- Notification routing that shows push, SMS fallback, and backup guardian escalation
+- Family policy surface for trust boundaries, guardian roster, and privacy defaults
+- Deployment flow showing how a parent would actually install and operate the system
 
 ## Completed
 - Repo cloned and connected to GitHub
 - Next.js app scaffolded in `web/`
-- Original analyzer concept replaced with guardian dashboard concept
+- Original analyzer concept replaced with a guardian console product concept
+- Product repositioned away from pasted chat analysis into a deployable family safety network
 - Local alert-analysis API implemented
+- Guardian action logging implemented
 - Lint passed
 - Production build passed
 - Local dev server running
 
 ## Next
-- Add acknowledgement state and parent action logging
-- Add app connectors / device setup simulation
-- Add richer family policy customization
-- Build submission-grade screenshots, README, and demo script
+- Add richer interactive family policy controls and configuration state
+- Prepare submission-grade screenshots and a clear demo script
+- Refine the deployment story and judge-facing narration
