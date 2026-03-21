@@ -1,0 +1,7 @@
+# Root-level local artifacts
+Microsoft/
+
+# Next.js app artifacts
+web/node_modules/
+web/.next/
+web/devserver.log
