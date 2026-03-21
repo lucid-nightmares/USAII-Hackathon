@@ -75,6 +75,19 @@ type GuardianRoute = {
   status: RouteStatus;
 };
 
+type LiveSignal = {
+  title: string;
+  value: string;
+  note: string;
+};
+
+type TimelineEntry = {
+  time: string;
+  title: string;
+  note: string;
+  tone: "neutral" | "watch" | "alert";
+};
+
 type InstallKit = {
   id: string;
   name: string;
@@ -177,6 +190,138 @@ const eventsByChild: Record<string, EventRecord[]> = {
   ],
 };
 
+const liveSignalsByChild: Record<string, LiveSignal[]> = {
+  maya: [
+    {
+      title: "Current app",
+      value: "Messenger Kids",
+      note: "Direct messages are being watched for secrecy, gifts, and off-app moves.",
+    },
+    {
+      title: "Location",
+      value: "Home",
+      note: "Inside the family safe zone. No travel alert is active.",
+    },
+    {
+      title: "Focus mode",
+      value: "Homework off",
+      note: "Entertainment apps are allowed until 8:30 PM.",
+    },
+    {
+      title: "New contacts",
+      value: "1 pending",
+      note: "Any first-time contact stays read-only until a parent approves it.",
+    },
+  ],
+  leo: [
+    {
+      title: "Current app",
+      value: "Minecraft chat",
+      note: "Chat is open, but voice invites are blocked after school hours.",
+    },
+    {
+      title: "Location",
+      value: "Grandma's house",
+      note: "Matches today's allowed places.",
+    },
+    {
+      title: "Focus mode",
+      value: "School shield on",
+      note: "Search and video suggestions stay filtered until 6 PM.",
+    },
+    {
+      title: "New contacts",
+      value: "0 pending",
+      note: "No one new has tried to message Leo today.",
+    },
+  ],
+  nina: [
+    {
+      title: "Current app",
+      value: "Reading app",
+      note: "Only school and reading apps are currently available.",
+    },
+    {
+      title: "Location",
+      value: "School",
+      note: "Travel alerts are muted during class hours.",
+    },
+    {
+      title: "Focus mode",
+      value: "Quiet hours on",
+      note: "Games and browsers stay hidden until a parent opens them.",
+    },
+    {
+      title: "New contacts",
+      value: "0 pending",
+      note: "No outside messaging is enabled on this device.",
+    },
+  ],
+};
+
+const timelineByChild: Record<string, TimelineEntry[]> = {
+  maya: [
+    {
+      time: "7:42 PM",
+      title: "Messenger Kids alert",
+      note: "A new contact tried to move the conversation off the app and asked Maya not to tell a parent.",
+      tone: "alert",
+    },
+    {
+      time: "7:39 PM",
+      title: "Roblox reward pressure",
+      note: "A player offered Robux in exchange for a private picture, so the app is ready to be paused.",
+      tone: "alert",
+    },
+    {
+      time: "7:11 PM",
+      title: "Bedtime reminder queued",
+      note: "The tablet will switch to reading-only mode at 8:30 PM.",
+      tone: "neutral",
+    },
+    {
+      time: "6:50 PM",
+      title: "New contact hold",
+      note: "A first-time contact can send one message, but cannot start a call or add Maya elsewhere.",
+      tone: "watch",
+    },
+  ],
+  leo: [
+    {
+      time: "6:15 PM",
+      title: "Private server invite",
+      note: "Minecraft chat suggested moving Leo into a private server without involving an adult.",
+      tone: "watch",
+    },
+    {
+      time: "5:30 PM",
+      title: "Bus ride home",
+      note: "Location check-in arrived automatically when Leo left school.",
+      tone: "neutral",
+    },
+    {
+      time: "4:10 PM",
+      title: "Search filter blocked",
+      note: "Chrome blocked a mature video search and logged the topic instead of the full page.",
+      tone: "watch",
+    },
+  ],
+  nina: [
+    {
+      time: "4:02 PM",
+      title: "Reading streak complete",
+      note: "No safety issue. Nina finished her reading goal and the dashboard marked the device as calm.",
+      tone: "neutral",
+    },
+    {
+      time: "3:54 PM",
+      title: "Classroom assignment",
+      note: "School tablet traffic stayed inside approved class apps.",
+      tone: "neutral",
+    },
+  ],
+};
+
 const installKits: InstallKit[] = [
   {
     id: "ipad",
@@ -222,33 +367,6 @@ const policyModules: PolicyModule[] = [
   },
 ];
 
-const responsibleLayers = [
-  {
-    title: "Human-in-the-loop escalation",
-    body: "The model never acts as the final decision-maker. It routes a narrow incident packet to a guardian, who decides whether to call, lock, escalate, or unlock more context.",
-  },
-  {
-    title: "Data minimization by design",
-    body: "Signals are generated on-device. The parent console receives redacted evidence, app metadata, and timestamps rather than a full transcript archive.",
-  },
-  {
-    title: "False-positive containment",
-    body: "School-safe shielding and app allowlists suppress low-risk educational flows so the product does not spam guardians with ordinary classroom activity.",
-  },
-  {
-    title: "Age-appropriate response",
-    body: "The workflow is designed for younger children: calm guardian check-in, trusted-adult escalation, and app restrictions before any punitive or invasive action.",
-  },
-];
-
-const qualifierChecklist = [
-  "Clear problem statement tied to younger-child digital safety",
-  "Deployable product story instead of a one-screen classifier demo",
-  "Responsible AI posture with human review and privacy boundaries",
-  "Live functionality: scanning, routing, response logging, and family controls",
-  "Pitch-ready demo flow with setup story, product operation, and judge-facing differentiation",
-];
-
 const severityTone: Record<Severity, string> = {
   info: "border-[#93c5fd] bg-[#e0f2fe] text-[#0c4a6e]",
   watch: "border-[#facc15] bg-[#fef3c7] text-[#854d0e]",
@@ -263,7 +381,7 @@ const routeTone: Record<RouteStatus, string> = {
 
 export default function Home() {
   const [activeChildId, setActiveChildId] = useState(children[0].id);
-  const [tab, setTab] = useState<"command" | "family" | "responsible" | "deploy">("command");
+  const [tab, setTab] = useState<"alerts" | "activity" | "privacy" | "setup">("alerts");
   const [analysis, setAnalysis] = useState<AnalysisResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -277,6 +395,8 @@ export default function Home() {
 
   const activeChild = children.find((child) => child.id === activeChildId) ?? children[0];
   const activeEvents = useMemo(() => eventsByChild[activeChild.id] ?? [], [activeChild.id]);
+  const activeSignals = useMemo(() => liveSignalsByChild[activeChild.id] ?? [], [activeChild.id]);
+  const activeTimeline = useMemo(() => timelineByChild[activeChild.id] ?? [], [activeChild.id]);
 
   const notificationRoutes: GuardianRoute[] = useMemo(() => {
     if (!analysis) {
@@ -386,28 +506,28 @@ export default function Home() {
           <div className="grid gap-8 px-6 py-7 sm:px-8 lg:grid-cols-[1.15fr_0.85fr] lg:px-10 lg:py-9">
             <div className="space-y-7">
               <div className="flex flex-wrap items-center gap-3 text-xs uppercase tracking-[0.22em] text-[#bfdbfe]">
-                <span className="rounded-full border border-white/15 bg-white/8 px-4 py-2">guardian ops console</span>
+                <span className="rounded-full border border-white/15 bg-white/8 px-4 py-2">family safety center</span>
                 <span className="rounded-full border border-[#99f6e4]/20 bg-[#0f3b4d] px-4 py-2 text-[#ccfbf1]">built for kids 10 and under</span>
               </div>
               <div className="space-y-5">
                 <h1 className="max-w-4xl font-[var(--font-display)] text-5xl leading-[0.94] tracking-[-0.06em] sm:text-6xl lg:text-7xl">
-                  A family safety network that acts before the parent misses the warning.
+                  A calmer way to watch a child’s device without turning family life into surveillance.
                 </h1>
                 <p className="max-w-3xl text-lg leading-8 text-[#dbeafe]">
-                  SignalSafe Guardian Network treats child safety like an operations problem. Child devices scan locally, emit redacted incident packets, and route the right alert to the right parent with a real response workflow instead of dumping every message into a surveillance inbox.
+                  SignalSafe gives parents one place to handle alerts, screen time, browsing, new contacts, travel checks, and bedtime rules. Most of the heavy lifting stays on the child’s device, so parents only see a short summary when something actually needs attention.
                 </p>
               </div>
               <div className="grid gap-4 sm:grid-cols-3">
-                <HeroCard label="Local-first" value="Redacted packets only" />
-                <HeroCard label="Guardian response" value="Push, SMS, backup guardian" />
-                <HeroCard label="Deployment" value="Install kits for tablets and phones" />
+                <HeroCard label="On the device" value="Full messages stay local unless a rule is tripped" />
+                <HeroCard label="For parents" value="Fast alerts, check-ins, pause controls" />
+                <HeroCard label="Beyond chat" value="Apps, browsing, travel, bedtime, contacts" />
               </div>
             </div>
             <div className="rounded-[1.8rem] border border-white/12 bg-white/8 p-5 backdrop-blur">
               <div className="flex items-center justify-between border-b border-white/12 pb-4">
                 <div>
-                  <div className="text-xs uppercase tracking-[0.2em] text-[#a7f3d0]">Tonight’s command brief</div>
-                  <div className="mt-2 font-[var(--font-display)] text-2xl tracking-[-0.04em]">Family overview</div>
+                  <div className="text-xs uppercase tracking-[0.2em] text-[#a7f3d0]">Family snapshot</div>
+                  <div className="mt-2 font-[var(--font-display)] text-2xl tracking-[-0.04em]">What needs a parent right now</div>
                 </div>
                 <button
                   className="rounded-full border border-white/18 bg-white/10 px-4 py-2 text-sm text-white transition hover:bg-white/16"
@@ -424,7 +544,7 @@ export default function Home() {
                 <BriefingLine label="Status" value={analysis?.statusLine ?? activeChild.status} />
               </div>
               <div className="mt-5 rounded-[1.4rem] bg-[#082032] px-4 py-4 text-sm leading-6 text-[#dbeafe]">
-                {analysis?.guardianDigest ?? "Run a scan to populate incident command, notification routing, and the parent response queue."}
+                {analysis?.guardianDigest ?? "Run a device check to fill the alert list, update the parent queue, and refresh the current-device summary."}
               </div>
               <div className="mt-5 flex flex-wrap gap-2">
                 {notificationRoutes.map((route) => (
@@ -533,15 +653,15 @@ export default function Home() {
             <div className="rounded-[1.8rem] border border-[#dbe4ef] bg-white p-5 shadow-[0_20px_65px_rgba(15,23,42,0.06)]">
               <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[#e5edf6] pb-4">
                 <div>
-                  <div className="text-xs uppercase tracking-[0.22em] text-[#0f766e]">SignalSafe console</div>
-                  <h2 className="mt-2 font-[var(--font-display)] text-3xl tracking-[-0.04em]">Parent command center</h2>
+                  <div className="text-xs uppercase tracking-[0.22em] text-[#0f766e]">SignalSafe home</div>
+                  <h2 className="mt-2 font-[var(--font-display)] text-3xl tracking-[-0.04em]">Parent dashboard</h2>
                 </div>
                 <div className="flex flex-wrap gap-2">
                   {[
-                    ["command", "Incident command"],
-                    ["family", "Family policy"],
-                    ["responsible", "Responsible AI"],
-                    ["deploy", "Deployment path"],
+                    ["alerts", "Alerts"],
+                    ["activity", "Daily activity"],
+                    ["privacy", "Privacy & rules"],
+                    ["setup", "Setup"],
                   ].map(([value, label]) => (
                     <button
                       key={value}
@@ -555,13 +675,13 @@ export default function Home() {
                 </div>
               </div>
 
-              {tab === "command" ? (
+              {tab === "alerts" ? (
                 <div className="mt-5 grid gap-5 xl:grid-cols-[0.9fr_1.1fr]">
                   <div className="space-y-5">
                     <div className="rounded-[1.5rem] bg-[linear-gradient(135deg,_#0f172a_0%,_#1e293b_100%)] p-5 text-white">
                       <div className="flex items-start justify-between gap-4">
                         <div>
-                          <div className="text-xs uppercase tracking-[0.22em] text-[#7dd3fc]">Incident commander</div>
+                          <div className="text-xs uppercase tracking-[0.22em] text-[#7dd3fc]">Live watch</div>
                           <div className="mt-2 font-[var(--font-display)] text-4xl tracking-[-0.05em]">{activeChild.name}</div>
                           <div className="mt-2 text-sm text-[#cbd5e1]">{activeChild.installState} • last device packet {activeChild.checkIn}</div>
                         </div>
@@ -583,7 +703,7 @@ export default function Home() {
                       <div className="flex items-center justify-between gap-3">
                         <div>
                           <div className="text-xs uppercase tracking-[0.22em] text-[#0f766e]">Notification routes</div>
-                          <h3 className="mt-2 font-[var(--font-display)] text-2xl tracking-[-0.03em]">Who gets notified now</h3>
+                          <h3 className="mt-2 font-[var(--font-display)] text-2xl tracking-[-0.03em]">Who gets the alert</h3>
                         </div>
                         <div className="rounded-full bg-white px-3 py-2 text-xs uppercase tracking-[0.18em] text-[#475569]">
                           real-time plan
@@ -610,7 +730,7 @@ export default function Home() {
                       <div className="flex items-center justify-between gap-3">
                         <div>
                           <div className="text-xs uppercase tracking-[0.22em] text-[#0f766e]">Priority queue</div>
-                          <h3 className="mt-2 font-[var(--font-display)] text-2xl tracking-[-0.03em]">Immediate guardian actions</h3>
+                          <h3 className="mt-2 font-[var(--font-display)] text-2xl tracking-[-0.03em]">Things you can do right now</h3>
                         </div>
                         {topAlert ? (
                           <div className={`rounded-full border px-3 py-2 text-xs uppercase tracking-[0.18em] ${severityTone[topAlert.severity]}`}>
@@ -671,14 +791,66 @@ export default function Home() {
                           })
                         ) : (
                           <div className="rounded-[1.4rem] border border-dashed border-[#dbe4ef] bg-[#f8fafc] p-6 text-sm leading-6 text-[#64748b]">
-                            Run a guardian scan to convert device activity into a redacted parent queue with real notification routes.
+                            Run a device check to turn live activity into a short parent queue instead of a raw transcript dump.
                           </div>
                         )}
                       </div>
                     </div>
 
                     <div className="rounded-[1.5rem] border border-[#dbe4ef] bg-white p-5">
-                      <div className="text-xs uppercase tracking-[0.22em] text-[#0f766e]">Recent child-side activity</div>
+                      <div className="text-xs uppercase tracking-[0.22em] text-[#0f766e]">Live device picture</div>
+                      <div className="mt-4 grid gap-3 md:grid-cols-2">
+                        {activeSignals.map((signal) => (
+                          <div key={signal.title} className="rounded-[1.2rem] border border-[#e5edf6] bg-[#f8fafc] px-4 py-4">
+                            <div className="text-xs uppercase tracking-[0.18em] text-[#64748b]">{signal.title}</div>
+                            <div className="mt-2 font-medium text-[#0f172a]">{signal.value}</div>
+                            <div className="mt-2 text-sm leading-6 text-[#475569]">{signal.note}</div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              ) : null}
+
+              {tab === "activity" ? (
+                <div className="mt-5 grid gap-5 xl:grid-cols-[0.95fr_1.05fr]">
+                  <div className="space-y-5">
+                    <div className="rounded-[1.5rem] border border-[#dbe4ef] bg-[#f8fafc] p-5">
+                      <div className="text-xs uppercase tracking-[0.22em] text-[#0f766e]">Today at a glance</div>
+                      <div className="mt-4 grid gap-3 md:grid-cols-2">
+                        {activeSignals.map((signal) => (
+                          <div key={signal.title} className="rounded-[1.2rem] border border-white bg-white px-4 py-4">
+                            <div className="text-xs uppercase tracking-[0.18em] text-[#64748b]">{signal.title}</div>
+                            <div className="mt-2 font-medium text-[#0f172a]">{signal.value}</div>
+                            <div className="mt-2 text-sm leading-6 text-[#475569]">{signal.note}</div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div className="rounded-[1.5rem] border border-[#dbe4ef] bg-white p-5">
+                      <div className="text-xs uppercase tracking-[0.22em] text-[#0f766e]">Daily timeline</div>
+                      <div className="mt-4 space-y-3">
+                        {activeTimeline.map((entry) => (
+                          <TimelineCard key={`${entry.time}-${entry.title}`} entry={entry} />
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="space-y-5">
+                    <div className="rounded-[1.5rem] border border-[#dbe4ef] bg-[linear-gradient(135deg,_#fff7ed_0%,_#eff6ff_100%)] p-5">
+                      <div className="text-xs uppercase tracking-[0.22em] text-[#0f766e]">Contact and app gates</div>
+                      <div className="mt-3 grid gap-3">
+                        <StoryCard title="New contacts" body="New people can send one message, but calls, links, and off-app invites stay blocked until a parent approves them." />
+                        <StoryCard title="Browsing" body="Search and browsing are filtered by age, and blocked topics are logged as a topic label rather than a full page history." />
+                        <StoryCard title="Bedtime" body="Devices can slide into reading-only or homework-only modes automatically, without exposing every tap a child makes." />
+                      </div>
+                    </div>
+
+                    <div className="rounded-[1.5rem] border border-[#dbe4ef] bg-white p-5">
+                      <div className="text-xs uppercase tracking-[0.22em] text-[#0f766e]">Recent risky snippets</div>
                       <div className="mt-4 grid gap-3">
                         {activeEvents.map((event) => (
                           <div key={event.id} className="rounded-[1.2rem] border border-[#e5edf6] bg-[#f8fafc] px-4 py-4">
@@ -695,12 +867,12 @@ export default function Home() {
                 </div>
               ) : null}
 
-              {tab === "family" ? (
+              {tab === "privacy" ? (
                 <div className="mt-5 grid gap-5 xl:grid-cols-[0.95fr_1.05fr]">
                   <div className="space-y-5">
                     {policyModules.map((module) => (
                       <div key={module.title} className="rounded-[1.5rem] border border-[#dbe4ef] bg-[#f8fafc] p-5">
-                        <div className="text-xs uppercase tracking-[0.22em] text-[#0f766e]">Policy module</div>
+                        <div className="text-xs uppercase tracking-[0.22em] text-[#0f766e]">House rule</div>
                         <div className="mt-2 font-[var(--font-display)] text-2xl tracking-[-0.03em] text-[#0f172a]">{module.title}</div>
                         <div className="mt-3 text-sm leading-6 text-[#475569]">{module.summary}</div>
                         <div className="mt-4 flex flex-wrap gap-2">
@@ -716,37 +888,37 @@ export default function Home() {
 
                   <div className="space-y-5">
                     <div className="rounded-[1.5rem] border border-[#dbe4ef] bg-[linear-gradient(135deg,_#fff7ed_0%,_#eff6ff_100%)] p-5">
-                      <div className="text-xs uppercase tracking-[0.22em] text-[#0f766e]">Guardian roster</div>
+                      <div className="text-xs uppercase tracking-[0.22em] text-[#0f766e]">Family contacts</div>
                       <div className="mt-3 grid gap-3">
-                        <RosterCard name="Aditya" role="Primary guardian" note={`Push immediately, ${deviceLock === "Allowed" ? "can lock apps" : "reviews before locking"}, receives all critical packets.`} />
-                        <RosterCard name="Backup family contact" role="Secondary guardian" note={`SMS + email escalation after ${smsDelay.toLowerCase()} if primary misses the acknowledgement window.`} />
-                        <RosterCard name="Teacher-safe channel" role="Optional support contact" note={`School-safe summary only, ${schoolShield === "On" ? "available during school incidents" : "currently disabled"}.`} />
+                        <RosterCard name="Aditya" role="Primary parent" note={`Gets every urgent alert first and ${deviceLock === "Allowed" ? "can pause apps remotely" : "reviews before pausing apps"}.`} />
+                        <RosterCard name="Backup family contact" role="Backup adult" note={`Gets SMS and email after ${smsDelay.toLowerCase()} if the first parent misses the alert.`} />
+                        <RosterCard name="Teacher-safe channel" role="School contact" note={`School-only summaries are ${schoolShield === "On" ? "available" : "turned off"} during class hours.`} />
                       </div>
                     </div>
 
                     <div className="rounded-[1.5rem] border border-[#dbe4ef] bg-white p-5">
-                      <div className="text-xs uppercase tracking-[0.22em] text-[#0f766e]">Live family controls</div>
+                      <div className="text-xs uppercase tracking-[0.22em] text-[#0f766e]">Parent controls</div>
                       <div className="mt-4 grid gap-4">
                         <ControlGroup
-                          label="Fallback SMS delay"
+                          label="Fallback text delay"
                           value={smsDelay}
                           options={["3 min", "5 min", "10 min"]}
                           onChange={(value) => setSmsDelay(value as "3 min" | "5 min" | "10 min")}
                         />
                         <ControlGroup
-                          label="Transcript visibility"
+                          label="What parents can open"
                           value={transcriptMode}
                           options={["Redacted only", "Guardian unlock required"]}
                           onChange={(value) => setTranscriptMode(value as "Redacted only" | "Guardian unlock required")}
                         />
                         <ControlGroup
-                          label="School-hour shield"
+                          label="School shield"
                           value={schoolShield}
                           options={["On", "Off"]}
                           onChange={(value) => setSchoolShield(value as "On" | "Off")}
                         />
                         <ControlGroup
-                          label="Emergency device lock"
+                          label="Remote pause"
                           value={deviceLock}
                           options={["Allowed", "Manual only"]}
                           onChange={(value) => setDeviceLock(value as "Allowed" | "Manual only")}
@@ -755,110 +927,58 @@ export default function Home() {
                     </div>
 
                     <div className="rounded-[1.5rem] border border-[#dbe4ef] bg-[#10243f] p-5 text-white">
-                      <div className="text-xs uppercase tracking-[0.22em] text-[#7dd3fc]">Trust boundary</div>
-                      <div className="mt-3 font-[var(--font-display)] text-3xl tracking-[-0.04em]">What can leave the child device</div>
+                      <div className="text-xs uppercase tracking-[0.22em] text-[#7dd3fc]">What leaves the device</div>
                       <div className="mt-4 grid gap-3 text-sm leading-6 text-[#dbeafe]">
-                        <BoundaryLine text="Risk score, app name, and timestamp for triage" />
-                        <BoundaryLine text="Phrase fragments only after on-device redaction" />
-                        <BoundaryLine text="Guardian acknowledgement and escalation state" />
-                        <BoundaryLine text={transcriptMode === "Redacted only" ? "No raw transcript sync leaves the device." : "Raw transcript unlock still requires an explicit guardian action."} />
+                        <BoundaryLine text="App name, time, and risk level so a parent can react quickly" />
+                        <BoundaryLine text="Small redacted phrase fragments instead of full message history" />
+                        <BoundaryLine text="Parent acknowledgement and follow-up state so adults stay in sync" />
+                        <BoundaryLine text={transcriptMode === "Redacted only" ? "Full transcripts never sync out by default." : "A parent still has to explicitly unlock more context."} />
                       </div>
                     </div>
                   </div>
                 </div>
               ) : null}
 
-              {tab === "responsible" ? (
-                <div className="mt-5 grid gap-5 xl:grid-cols-[0.95fr_1.05fr]">
-                  <div className="space-y-5">
-                    <div className="rounded-[1.5rem] border border-[#dbe4ef] bg-[linear-gradient(135deg,_#eff6ff_0%,_#f8fafc_100%)] p-5">
-                      <div className="text-xs uppercase tracking-[0.22em] text-[#0f766e]">Responsible AI surface</div>
-                      <div className="mt-2 font-[var(--font-display)] text-3xl tracking-[-0.04em] text-[#0f172a]">Why this is safer than generic surveillance software</div>
-                      <div className="mt-4 grid gap-3">
-                        {responsibleLayers.map((layer) => (
-                          <StoryCard key={layer.title} title={layer.title} body={layer.body} />
-                        ))}
-                      </div>
-                    </div>
-
-                    <div className="rounded-[1.5rem] border border-[#dbe4ef] bg-white p-5">
-                      <div className="text-xs uppercase tracking-[0.22em] text-[#0f766e]">Judge checklist</div>
-                      <div className="mt-4 grid gap-3 text-sm leading-6 text-[#334155]">
-                        {qualifierChecklist.map((item) => (
-                          <div key={item} className="rounded-[1.1rem] border border-[#e5edf6] bg-[#f8fafc] px-4 py-4">
-                            {item}
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="space-y-5">
-                    <div className="rounded-[1.5rem] border border-[#dbe4ef] bg-[#10243f] p-5 text-white">
-                      <div className="text-xs uppercase tracking-[0.22em] text-[#7dd3fc]">Model contract</div>
-                      <div className="mt-2 font-[var(--font-display)] text-3xl tracking-[-0.04em]">AI should narrow the incident, not take over the parent’s judgment</div>
-                      <div className="mt-4 grid gap-3 text-sm leading-6 text-[#dbeafe]">
-                        <BoundaryLine text="Classify patterns like secrecy, off-platform movement, reward leverage, and location requests." />
-                        <BoundaryLine text="Return only the minimum incident packet needed for a human to respond." />
-                        <BoundaryLine text="Avoid punitive automation and keep every high-stakes action guardian-controlled." />
-                        <BoundaryLine text="Log acknowledgement and escalation so family response stays coordinated." />
-                      </div>
-                    </div>
-
-                    <div className="rounded-[1.5rem] border border-[#dbe4ef] bg-[#fffdfa] p-5">
-                      <div className="text-xs uppercase tracking-[0.22em] text-[#0f766e]">Submission readiness</div>
-                      <div className="mt-2 font-[var(--font-display)] text-3xl tracking-[-0.04em] text-[#0f172a]">What still makes this stronger than the average hackathon build</div>
-                      <div className="mt-4 grid gap-3 text-sm leading-6 text-[#475569]">
-                        <StoryCard title="Original framing" body="This is not a generic moderation dashboard. It is a guardian operations network specifically designed around younger kids, trust boundaries, and calm intervention." />
-                        <StoryCard title="Operational depth" body="The project now covers setup, routing, acknowledgement, escalation, deployment kits, and policy controls instead of stopping at pattern classification." />
-                        <StoryCard title="Pitch clarity" body="The demo can tell a clean story from installation through incident response, which is the kind of product completeness judges reward." />
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              ) : null}
-
-              {tab === "deploy" ? (
+              {tab === "setup" ? (
                 <div className="mt-5 grid gap-5 xl:grid-cols-[0.9fr_1.1fr]">
                   <div className="space-y-5">
                     <div className="rounded-[1.5rem] border border-[#dbe4ef] bg-[#f8fafc] p-5">
-                      <div className="text-xs uppercase tracking-[0.22em] text-[#0f766e]">Selected install kit</div>
+                      <div className="text-xs uppercase tracking-[0.22em] text-[#0f766e]">Selected setup kit</div>
                       <div className="mt-2 font-[var(--font-display)] text-3xl tracking-[-0.04em] text-[#0f172a]">{activeKit.name}</div>
                       <div className="mt-3 text-sm leading-6 text-[#475569]">{activeKit.promise}</div>
                       <div className="mt-4 grid gap-3 sm:grid-cols-3">
                         <DeployStat label="Format" value={activeKit.format} />
                         <DeployStat label="Setup time" value={activeKit.setupTime} />
-                        <DeployStat label="Target" value={activeKit.audience} />
+                        <DeployStat label="Best for" value={activeKit.audience} />
                       </div>
                     </div>
 
                     <div className="rounded-[1.5rem] border border-[#dbe4ef] bg-white p-5">
-                      <div className="text-xs uppercase tracking-[0.22em] text-[#0f766e]">Deployment map</div>
+                      <div className="text-xs uppercase tracking-[0.22em] text-[#0f766e]">How setup works</div>
                       <ol className="mt-4 space-y-3 text-sm leading-6 text-[#334155]">
-                        <li>1. Parent installs the child profile or family agent from the guardian phone.</li>
-                        <li>2. The device registers approved messaging surfaces and local scanning rules.</li>
-                        <li>3. Raw child messages stay local; only redacted incident packets sync upward.</li>
-                        <li>4. Push reaches the primary guardian immediately when the threshold is crossed.</li>
-                        <li>5. Missed acknowledgement moves the incident into SMS after {smsDelay.toLowerCase()}, then backup guardian and email fallback.</li>
+                        <li>1. A parent installs the child profile from their own phone.</li>
+                        <li>2. The device turns on age-based browsing, message, and contact rules.</li>
+                        <li>3. Everyday activity stays on the device unless a rule is tripped.</li>
+                        <li>4. Parents get a short alert with just enough detail to act quickly.</li>
+                        <li>5. If no adult responds, the alert can move into text and backup-adult follow-up after {smsDelay.toLowerCase()}.</li>
                       </ol>
                     </div>
                   </div>
 
                   <div className="space-y-5">
                     <div className="rounded-[1.5rem] border border-[#dbe4ef] bg-[#fffdfa] p-5">
-                      <div className="text-xs uppercase tracking-[0.22em] text-[#0f766e]">Judge story</div>
-                      <div className="mt-2 font-[var(--font-display)] text-3xl tracking-[-0.04em] text-[#0f172a]">Why this feels like a product, not a classifier demo</div>
+                      <div className="text-xs uppercase tracking-[0.22em] text-[#0f766e]">What parents get on day one</div>
                       <div className="mt-4 grid gap-3 text-sm leading-6 text-[#475569]">
-                        <StoryCard title="Real deployment surface" body="Parents install a child profile or family agent instead of pasting message blobs into a toy form." />
-                        <StoryCard title="Real alert operations" body="The parent sees routing, acknowledgement, escalation windows, and app-level response choices." />
-                        <StoryCard title="Real privacy posture" body="The product is explicit about what never leaves the child device and why guardians only receive the minimum required incident packet." />
+                        <StoryCard title="Alert feed" body="A short list of the things that really need a parent, not a giant scroll of every message and website." />
+                        <StoryCard title="Daily activity" body="A simple daily timeline covering browsing blocks, location check-ins, contact requests, bedtime mode, and risky messages." />
+                        <StoryCard title="Remote help" body="Parents can call, pause an app, change a rule, or ask another adult to step in without taking over the whole device." />
                       </div>
                     </div>
 
                     <div className="rounded-[1.5rem] border border-[#dbe4ef] bg-[#10243f] p-5 text-white">
-                      <div className="text-xs uppercase tracking-[0.22em] text-[#7dd3fc]">Submission angle</div>
+                      <div className="text-xs uppercase tracking-[0.22em] text-[#7dd3fc]">Why this is different</div>
                       <div className="mt-3 text-sm leading-7 text-[#dbeafe]">
-                        Position SignalSafe as a privacy-preserving guardian network for younger children, where the AI layer exists to reduce harm without normalizing total parental surveillance. The core story is trustworthy escalation design.
+                        Most family safety tools force a parent to choose between full surveillance and almost no visibility. SignalSafe sits in the middle: broad device awareness, narrow evidence, and quick parent action when something starts going wrong.
                       </div>
                     </div>
                   </div>
@@ -1003,6 +1123,24 @@ function StoryCard({ title, body }: { title: string; body: string }) {
     <div className="rounded-[1.2rem] border border-[#e5edf6] bg-white px-4 py-4">
       <div className="font-medium text-[#0f172a]">{title}</div>
       <div className="mt-2 text-sm leading-6 text-[#475569]">{body}</div>
+    </div>
+  );
+}
+
+function TimelineCard({ entry }: { entry: TimelineEntry }) {
+  const toneMap = {
+    neutral: "border-[#dbe4ef] bg-[#f8fafc] text-[#334155]",
+    watch: "border-[#fde68a] bg-[#fffbeb] text-[#854d0e]",
+    alert: "border-[#fecdd3] bg-[#fff1f2] text-[#9f1239]",
+  } as const;
+
+  return (
+    <div className={`rounded-[1.2rem] border px-4 py-4 ${toneMap[entry.tone]}`}>
+      <div className="flex items-center justify-between gap-3 text-sm">
+        <div className="font-medium">{entry.title}</div>
+        <div>{entry.time}</div>
+      </div>
+      <div className="mt-2 text-sm leading-6">{entry.note}</div>
     </div>
   );
 }

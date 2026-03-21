@@ -1,27 +1,26 @@
-# SignalSafe Guardian Network
+# SignalSafe
 
 Submission workspace for the USAII Global AI Hackathon 2026.
 
 ## Current concept
 
-`SignalSafe Guardian Network` is a privacy-respecting safety system for parents of kids 10 and under.
+`SignalSafe` is a privacy-first family safety dashboard for parents of kids 10 and under.
 
-Instead of asking parents to paste random chat blobs into a generic analyzer, the product is framed as a deployable family safety network:
+It is meant to feel closer to a lighter, home-friendly version of a device supervision tool than a one-off AI checker:
 
-- a child device runs local scanning on approved messaging surfaces
-- risky interactions are collapsed into redacted incident packets
-- a guardian console shows routing, acknowledgement state, escalation, and app-level response actions
-- full transcript access stays local by default unless a parent explicitly unlocks more detail
+- messages, browsing, app changes, contact requests, bedtime rules, and travel checks can all be watched from one parent view
+- most analysis stays on the child device
+- parents get short alerts and summaries instead of a full transcript archive
+- a parent can check in, pause an app, tighten a rule, or bring in another adult when something looks wrong
 
-The core product claim is not just detection. It is trustworthy escalation design for younger children.
+The product tries to sit between two bad extremes: seeing nothing at all and reading everything.
 
 ## Demo shape
 
-- `Guardian fleet`: multiple child devices with different install profiles
-- `Incident command`: parent dashboard with alert queue, redacted evidence, and response actions
-- `Family policy`: guardian roster, privacy boundaries, escalation timing, and configurable family controls
-- `Responsible AI`: explicit human-in-the-loop, data-minimization, and false-positive containment story
-- `Deployment path`: install kits for Apple family devices, Android family phones, and school-safe tablets
+- `Alerts`: risky messages and parent response actions
+- `Daily activity`: current device state, blocked events, and the day timeline
+- `Privacy & rules`: family contacts, household rules, and what can leave the device
+- `Setup`: install kits and the first-run setup flow for tablets and phones
 
 ## Repo layout
 
