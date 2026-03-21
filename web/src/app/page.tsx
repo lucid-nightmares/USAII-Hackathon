@@ -48,12 +48,20 @@ type AnalysisResponse = {
   alerts: AlertCard[];
   privacyNotes: string[];
   dashboardStats: {
-    processed: number;
-    flagged: number;
-    redacted: number;
-    queued: number;
+    processed: string;
+    flagged: string;
+    redacted: string;
+    queued: string;
   };
   deliveryPlan: DeliveryPlan;
+};
+
+type ActionEntry = {
+  id: string;
+  at: string;
+  alertTitle: string;
+  action: string;
+  outcome: string;
 };
 
 const children: ChildProfile[] = [
@@ -171,12 +179,15 @@ export default function Home() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [tab, setTab] = useState<"dashboard" | "policy" | "deploy">("dashboard");
+  const [actionLog, setActionLog] = useState<ActionEntry[]>([]);
+  const [acknowledged, setAcknowledged] = useState<string[]>([]);
 
   const activeEvents = useMemo(() => eventLibrary[activeChild.id], [activeChild]);
 
   async function runGuardianScan(child: ChildProfile) {
     setLoading(true);
     setError("");
+    setAcknowledged([]);
     try {
       const response = await fetch("/api/analyze", {
         method: "POST",
@@ -194,11 +205,45 @@ export default function Home() {
 
       const data = (await response.json()) as AnalysisResponse;
       setAnalysis(data);
+      setActionLog((current) => [
+        {
+          id: crypto.randomUUID(),
+          at: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+          alertTitle: `${child.name} scan`,
+          action: "Device scan completed",
+          outcome: data.statusLine,
+        },
+        ...current,
+      ]);
     } catch {
       setError("Guardian scan unavailable. Check the local app process and retry.");
     } finally {
       setLoading(false);
     }
+  }
+
+  function handleAlertAction(alert: AlertCard, action: "Acknowledge" | "Call child" | "Lock app" | "Escalate") {
+    if (action === "Acknowledge") {
+      setAcknowledged((current) => (current.includes(alert.id) ? current : [alert.id, ...current]));
+    }
+
+    const outcomeMap = {
+      Acknowledge: "Primary guardian confirmed receipt and paused fallback SMS.",
+      "Call child": "Guardian check-in call initiated from the dashboard.",
+      "Lock app": `Temporary lock requested for ${alert.app}.`,
+      Escalate: "Escalation packet sent to the second guardian and email backup.",
+    } as const;
+
+    setActionLog((current) => [
+      {
+        id: crypto.randomUUID(),
+        at: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+        alertTitle: alert.title,
+        action,
+        outcome: outcomeMap[action],
+      },
+      ...current,
+    ]);
   }
 
   return (
@@ -364,6 +409,11 @@ export default function Home() {
                     <div className="mt-4 text-sm leading-6 text-[#dbe4f0]">
                       {analysis?.guardianDigest ?? "Run a scan to produce a guardian digest, alert queue, and delivery plan."}
                     </div>
+                    {analysis ? (
+                      <div className={`mt-4 inline-flex rounded-full border px-4 py-2 text-xs uppercase tracking-[0.18em] ${severityTone[analysis.overallRisk]}`}>
+                        {analysis.statusLine}
+                      </div>
+                    ) : null}
                   </div>
 
                   <div className="rounded-[1.5rem] border border-[#d7dee9] bg-[#f8fafc] p-5">
@@ -419,47 +469,69 @@ export default function Home() {
                     </div>
                     <div className="mt-4 grid gap-4">
                       {(analysis?.alerts ?? []).length > 0 ? (
-                        analysis?.alerts.map((alert) => (
-                          <div key={alert.id} className="rounded-[1.5rem] border border-[#e5e7eb] bg-[#f8fafc] p-4">
-                            <div className="flex flex-wrap items-center justify-between gap-3">
-                              <div>
-                                <div className="font-semibold text-[#111827]">{alert.title}</div>
-                                <div className="mt-1 text-sm text-[#64748b]">{alert.app} • score {alert.score}</div>
-                              </div>
-                              <div className={`rounded-full border px-3 py-2 text-xs uppercase tracking-[0.18em] ${severityTone[alert.severity]}`}>
-                                {alert.severity}
-                              </div>
-                            </div>
-                            <p className="mt-3 text-sm leading-6 text-[#475569]">{alert.summary}</p>
-                            <div className="mt-4 grid gap-4 md:grid-cols-[1.05fr_0.95fr]">
-                              <div>
-                                <div className="text-xs uppercase tracking-[0.18em] text-[#0f766e]">Redacted evidence</div>
-                                <div className="mt-2 flex flex-wrap gap-2">
-                                  {alert.evidence.map((item) => (
-                                    <span key={item} className="rounded-full border border-[#d7dee9] bg-white px-3 py-2 text-xs text-[#334155]">
-                                      {item}
+                        analysis?.alerts.map((alert) => {
+                          const isAcknowledged = acknowledged.includes(alert.id);
+                          return (
+                            <div key={alert.id} className="rounded-[1.5rem] border border-[#e5e7eb] bg-[#f8fafc] p-4">
+                              <div className="flex flex-wrap items-center justify-between gap-3">
+                                <div>
+                                  <div className="font-semibold text-[#111827]">{alert.title}</div>
+                                  <div className="mt-1 text-sm text-[#64748b]">{alert.app} • score {alert.score}</div>
+                                </div>
+                                <div className="flex flex-wrap items-center gap-2">
+                                  {isAcknowledged ? (
+                                    <span className="rounded-full border border-[#86efac] bg-[#dcfce7] px-3 py-2 text-xs uppercase tracking-[0.18em] text-[#166534]">
+                                      acknowledged
                                     </span>
-                                  ))}
+                                  ) : null}
+                                  <div className={`rounded-full border px-3 py-2 text-xs uppercase tracking-[0.18em] ${severityTone[alert.severity]}`}>
+                                    {alert.severity}
+                                  </div>
                                 </div>
                               </div>
-                              <div>
-                                <div className="text-xs uppercase tracking-[0.18em] text-[#0f766e]">Action plan</div>
-                                <ul className="mt-2 space-y-2 text-sm leading-6 text-[#334155]">
-                                  {alert.actionPlan.map((step) => (
-                                    <li key={step}>• {step}</li>
-                                  ))}
-                                </ul>
+                              <p className="mt-3 text-sm leading-6 text-[#475569]">{alert.summary}</p>
+                              <div className="mt-4 grid gap-4 md:grid-cols-[1.05fr_0.95fr]">
+                                <div>
+                                  <div className="text-xs uppercase tracking-[0.18em] text-[#0f766e]">Redacted evidence</div>
+                                  <div className="mt-2 flex flex-wrap gap-2">
+                                    {alert.evidence.map((item) => (
+                                      <span key={item} className="rounded-full border border-[#d7dee9] bg-white px-3 py-2 text-xs text-[#334155]">
+                                        {item}
+                                      </span>
+                                    ))}
+                                  </div>
+                                </div>
+                                <div>
+                                  <div className="text-xs uppercase tracking-[0.18em] text-[#0f766e]">Action plan</div>
+                                  <ul className="mt-2 space-y-2 text-sm leading-6 text-[#334155]">
+                                    {alert.actionPlan.map((step) => (
+                                      <li key={step}>• {step}</li>
+                                    ))}
+                                  </ul>
+                                </div>
+                              </div>
+                              <div className="mt-4 flex flex-wrap gap-2">
+                                {alert.channels.map((channel) => (
+                                  <span key={channel} className="rounded-full bg-[#0f172a] px-3 py-2 text-xs text-white">
+                                    {channel}
+                                  </span>
+                                ))}
+                              </div>
+                              <div className="mt-4 flex flex-wrap gap-2">
+                                {(["Acknowledge", "Call child", "Lock app", "Escalate"] as const).map((action) => (
+                                  <button
+                                    key={action}
+                                    className="rounded-full border border-[#cbd5e1] bg-white px-4 py-2 text-sm text-[#111827] transition hover:bg-[#f1f5f9]"
+                                    onClick={() => handleAlertAction(alert, action)}
+                                    type="button"
+                                  >
+                                    {action}
+                                  </button>
+                                ))}
                               </div>
                             </div>
-                            <div className="mt-4 flex flex-wrap gap-2">
-                              {alert.channels.map((channel) => (
-                                <span key={channel} className="rounded-full bg-[#0f172a] px-3 py-2 text-xs text-white">
-                                  {channel}
-                                </span>
-                              ))}
-                            </div>
-                          </div>
-                        ))
+                          );
+                        })
                       ) : (
                         <div className="rounded-[1.5rem] border border-dashed border-[#cbd5e1] bg-[#f8fafc] p-6 text-sm leading-6 text-[#64748b]">
                           Run a guardian scan to populate alert cards, evidence summaries, and escalation steps.
@@ -525,11 +597,47 @@ export default function Home() {
                   <div className="mt-4 space-y-3 text-sm leading-6 text-[#dbe4f0]">
                     <p>This is a deployable family safety product concept, not a one-off classifier demo.</p>
                     <p>The privacy model is concrete: local scanning, redacted sync, explicit guardian routing.</p>
-                    <p>The dashboard makes the alerting story legible in under a minute, which is exactly what a hackathon demo needs.</p>
+                    <p>The dashboard now includes acknowledgement and response logging, so the alerting flow behaves like an actual product operation.</p>
                   </div>
                 </div>
               </div>
             ) : null}
+          </div>
+
+          <div className="grid gap-6 lg:grid-cols-[0.9fr_1.1fr]">
+            <div className="rounded-[2rem] border border-[#d7dee9] bg-[#0f172a] p-5 text-white">
+              <div className="text-xs uppercase tracking-[0.22em] text-[#93c5fd]">Response log</div>
+              <div className="mt-3 font-[var(--font-display)] text-3xl tracking-[-0.04em]">Guardian action timeline</div>
+              <div className="mt-4 space-y-3">
+                {actionLog.length > 0 ? (
+                  actionLog.map((entry) => (
+                    <div key={entry.id} className="rounded-[1rem] bg-white/6 px-4 py-4">
+                      <div className="flex items-center justify-between gap-3 text-sm">
+                        <div className="font-medium">{entry.action}</div>
+                        <div className="text-[#94a3b8]">{entry.at}</div>
+                      </div>
+                      <div className="mt-2 text-sm text-[#e2e8f0]">{entry.alertTitle}</div>
+                      <div className="mt-1 text-sm leading-6 text-[#cbd5e1]">{entry.outcome}</div>
+                    </div>
+                  ))
+                ) : (
+                  <div className="rounded-[1rem] bg-white/6 px-4 py-4 text-sm text-[#cbd5e1]">
+                    Scan a device or act on an alert to populate the guardian response timeline.
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <div className="rounded-[2rem] border border-[#d7dee9] bg-white p-5 shadow-[0_18px_60px_rgba(15,23,42,0.06)]">
+              <div className="text-xs uppercase tracking-[0.22em] text-[#0f766e]">Trust boundary</div>
+              <div className="mt-3 font-[var(--font-display)] text-3xl tracking-[-0.04em] text-[#111827]">What leaves the child device</div>
+              <div className="mt-4 grid gap-3 text-sm leading-6 text-[#334155]">
+                <div className="rounded-[1rem] border border-[#d7dee9] bg-[#f8fafc] px-4 py-4">Risk score and severity classification</div>
+                <div className="rounded-[1rem] border border-[#d7dee9] bg-[#f8fafc] px-4 py-4">Redacted evidence phrases instead of full messages</div>
+                <div className="rounded-[1rem] border border-[#d7dee9] bg-[#f8fafc] px-4 py-4">App name and timestamp for guardian triage</div>
+                <div className="rounded-[1rem] border border-[#d7dee9] bg-[#f8fafc] px-4 py-4">Acknowledgement and escalation state for guardian coordination</div>
+              </div>
+            </div>
           </div>
         </section>
       </section>
