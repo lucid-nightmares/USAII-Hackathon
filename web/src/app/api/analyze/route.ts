@@ -17,6 +17,12 @@ type Tactic = {
   explanation: string;
 };
 
+type Highlight = {
+  phrase: string;
+  tacticId: TacticId;
+  severity: "watch" | "act-now";
+};
+
 const tacticRules: Array<{
   id: TacticId;
   label: string;
@@ -28,132 +34,183 @@ const tacticRules: Array<{
     id: "secrecy",
     label: "Secrecy pressure",
     weight: 18,
-    explanation: "Risky conversations often ask the target to hide the interaction from trusted adults or friends.",
-    patterns: [/don't tell/i, /keep this secret/i, /our little secret/i, /between us/i],
+    explanation:
+      "The speaker is trying to hide the conversation from trusted adults or friends.",
+    patterns: [/don't tell/i, /keep this secret/i, /between us/i, /don't let .* see/i],
   },
   {
     id: "isolation",
     label: "Isolation from support",
     weight: 14,
-    explanation: "Pushing someone away from friends, family, or teachers increases dependency and reduces safety.",
-    patterns: [/your parents wouldn't understand/i, /don't involve/i, /they will stop us/i, /just trust me/i],
+    explanation:
+      "The speaker frames other people as obstacles so the target relies only on them.",
+    patterns: [/your parents .* ruin/i, /adults always ruin/i, /don't involve/i, /just trust me/i],
   },
   {
     id: "urgency",
     label: "Urgency and pressure",
     weight: 12,
-    explanation: "Manipulators often demand immediate action so the target has less time to think or ask for help.",
-    patterns: [/reply now/i, /right now/i, /hurry/i, /before it's too late/i, /don't make me wait/i],
+    explanation:
+      "The speaker wants a rushed answer before the target can slow down or ask for help.",
+    patterns: [/reply now/i, /right now/i, /hurry/i, /before i head out/i, /don't make me wait/i],
   },
   {
     id: "gifting",
-    label: "Reward or gift leverage",
+    label: "Reward leverage",
     weight: 15,
-    explanation: "Offering money, gifts, games, or favors in exchange for private behavior is a classic manipulation tactic.",
-    patterns: [/buy you/i, /send you money/i, /gift/i, /reward you/i, /i'll pay/i],
+    explanation:
+      "A gift, purchase, or reward is being used to influence private behavior.",
+    patterns: [/buy you/i, /i'll get you/i, /send you money/i, /reward/i, /gift/i],
   },
   {
     id: "location",
     label: "Location or meeting request",
     weight: 16,
-    explanation: "Requests for private meetings, addresses, or travel details raise the risk level significantly.",
-    patterns: [/where do you live/i, /send your address/i, /meet me/i, /come alone/i, /what school do you go to/i],
+    explanation:
+      "The speaker is asking for a meeting, address, schedule, or school/location details.",
+    patterns: [/where do you live/i, /send your address/i, /meet me/i, /come alone/i, /what school/i],
   },
   {
     id: "age-gap",
     label: "Age-gap grooming cue",
     weight: 14,
-    explanation: "Language about being mature for your age can be used to normalize inappropriate dynamics.",
-    patterns: [/mature for your age/i, /older guys/i, /older girls/i, /you're not like other kids/i],
+    explanation:
+      "Language like 'mature for your age' can be used to normalize a power imbalance.",
+    patterns: [/mature than kids your age/i, /mature for your age/i, /not like other kids/i],
   },
   {
     id: "boundary-push",
-    label: "Boundary-pushing request",
+    label: "Boundary push",
     weight: 18,
-    explanation: "Requests for private photos, moving off-platform, or escalating intimacy are strong warning signs.",
-    patterns: [/private pic/i, /photo just for me/i, /move to telegram/i, /move to signal/i, /video call alone/i],
+    explanation:
+      "The speaker escalates intimacy or asks for private images or a channel change.",
+    patterns: [/private picture/i, /photo first/i, /add me on telegram/i, /move .* app/i, /video call alone/i],
   },
+];
+
+const trustSignals = [
+  { label: "Clear purpose", patterns: [/class tomorrow/i, /slides/i, /project/i, /assignment/i] },
+  { label: "No secrecy framing", patterns: [/everyone on the team/i, /teacher/i, /group chat/i] },
+  { label: "Time-bounded collaboration", patterns: [/before class/i, /tonight/i, /tomorrow/i] },
 ];
 
 function clamp(value: number, min: number, max: number) {
   return Math.max(min, Math.min(max, value));
 }
 
-function analyzeText(text: string) {
-  const lowered = text.trim();
-  const tactics: Tactic[] = tacticRules
-    .map((rule) => {
-      const hits = rule.patterns
-        .filter((pattern) => pattern.test(lowered))
-        .map((pattern) => pattern.source.replace(/\\b/g, ""));
+function dedupe<T>(values: T[]) {
+  return [...new Set(values)];
+}
 
-      if (!hits.length) {
-        return null;
-      }
+function analyze(text: string) {
+  const content = text.trim();
+  const tactics: Tactic[] = [];
+  const highlights: Highlight[] = [];
 
-      return {
-        id: rule.id,
-        label: rule.label,
-        weight: rule.weight,
-        hits,
-        explanation: rule.explanation,
-      } satisfies Tactic;
-    })
-    .filter((entry): entry is Tactic => entry !== null);
+  for (const rule of tacticRules) {
+    const hits = dedupe(
+      rule.patterns
+        .flatMap((pattern) => {
+          const matches = content.match(pattern);
+          return matches ?? [];
+        })
+        .map((match) => match.trim()),
+    );
 
-  const baseScore = tactics.reduce((sum, tactic) => sum + tactic.weight, 0);
-  const score = clamp(baseScore + Math.min(text.length / 12, 12), 4, 96);
+    if (!hits.length) {
+      continue;
+    }
+
+    tactics.push({
+      id: rule.id,
+      label: rule.label,
+      weight: rule.weight,
+      hits,
+      explanation: rule.explanation,
+    });
+
+    for (const hit of hits) {
+      highlights.push({
+        phrase: hit,
+        tacticId: rule.id,
+        severity: rule.weight >= 16 ? "act-now" : "watch",
+      });
+    }
+  }
+
+  const positiveSignals = trustSignals
+    .filter((signal) => signal.patterns.some((pattern) => pattern.test(content)))
+    .map((signal) => signal.label);
+
+  const rawScore = tactics.reduce((sum, item) => sum + item.weight, 0) - positiveSignals.length * 6;
+  const score = clamp(Math.round(rawScore + Math.min(content.length / 14, 10)), 2, 96);
 
   let level: "low" | "moderate" | "high" = "low";
-  if (score >= 60) {
+  if (score >= 58) {
     level = "high";
-  } else if (score >= 30) {
+  } else if (score >= 28) {
     level = "moderate";
   }
 
   const summary =
     tactics.length === 0
-      ? "This conversation does not show obvious grooming or manipulation cues in the current rule set, but context still matters."
-      : `The analyzer found ${tactics.length} manipulation signal${tactics.length > 1 ? "s" : ""}. The strongest concerns are ${tactics
-          .slice(0, 3)
-          .map((item) => item.label.toLowerCase())
-          .join(", ")}.`;
+      ? "The current snippet looks task-focused and does not show strong manipulation cues in this ruleset."
+      : `SignalSafe found ${tactics.length} tactic${tactics.length > 1 ? "s" : ""} that change the safety profile of the conversation.`;
 
   const nextSteps =
     level === "high"
       ? [
-          "Pause the conversation and avoid sharing more personal information.",
-          "Save screenshots or message links in case a trusted adult or moderator needs them.",
-          "Talk to a parent, teacher, counselor, or other trusted adult as soon as possible.",
-          "Use the platform's block and report tools.",
+          "Stop the conversation before sharing more information.",
+          "Save screenshots or message links for evidence.",
+          "Tell a trusted adult, counselor, or moderator as soon as possible.",
+          "Use report and block tools on the platform.",
         ]
       : level === "moderate"
         ? [
-            "Slow the conversation down and avoid moving to private channels.",
-            "Ask for a second opinion from a trusted adult or friend before replying.",
-            "Avoid sharing your address, school, schedule, or private images.",
-            "Set a clear boundary if the other person keeps escalating.",
+            "Keep the conversation on-platform and do not move to a private app.",
+            "Do not trade photos, rewards, or personal details.",
+            "Ask a trusted person for a second read before replying.",
+            "Set a direct boundary if the tone keeps escalating.",
           ]
         : [
-            "Keep normal online safety habits in place.",
-            "Do not share private information without a good reason.",
-            "If the tone changes, rerun the analysis or ask a trusted adult for a second opinion.",
+            "Keep basic online safety habits in place.",
+            "Stay focused on the original topic of the conversation.",
+            "If the tone shifts toward secrecy or pressure, re-check the conversation.",
           ];
 
   const saferReply =
     level === "high"
-      ? "I'm not comfortable continuing this conversation or moving to another app. I'm ending this chat and talking to a trusted adult."
+      ? "I'm not moving this chat or sharing anything private. I'm ending the conversation and checking with a trusted adult."
       : level === "moderate"
-        ? "I'd rather keep this conversation here and not share personal details. If that doesn't work, I won't continue."
-        : "Thanks. I'll keep the conversation here and stay focused on the original topic.";
+        ? "I want to keep this conversation here and stay on the original topic. I'm not sharing private details or photos."
+        : "That works. Let's keep this about the school task and use the regular class channel.";
+
+  const timeline =
+    tactics.length === 0
+      ? [
+          { label: "Signal check", body: "The conversation stays anchored to a normal task or shared purpose." },
+          { label: "Trust read", body: "No secrecy, no reward trade, and no pressure to move off-platform." },
+          { label: "Coaching result", body: "Maintain normal online safety habits and watch for future escalation." },
+        ]
+      : [
+          { label: "Entry point", body: `The first strong cue is ${tactics[0].label.toLowerCase()}, which changes how the message should be read.` },
+          { label: "Escalation", body: `${tactics.length > 1 ? "Additional tactics stack on top of each other" : "The tactic itself is enough to raise concern"} and increase the safety risk.` },
+          { label: "Intervention", body: "The product translates those cues into a calmer response and a practical next move." },
+        ];
 
   return {
-    score: Math.round(score),
+    score,
     level,
     summary,
     tactics,
     nextSteps,
     saferReply,
+    trustSignals:
+      positiveSignals.length > 0
+        ? positiveSignals
+        : ["Clear purpose is not established yet", "No reliable adult context visible", "No explicit boundary from the target yet"],
+    highlights,
+    timeline,
   };
 }
 
@@ -165,5 +222,5 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Text is required." }, { status: 400 });
   }
 
-  return NextResponse.json(analyzeText(text));
+  return NextResponse.json(analyze(text));
 }
