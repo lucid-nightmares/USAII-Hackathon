@@ -222,6 +222,33 @@ const policyModules: PolicyModule[] = [
   },
 ];
 
+const responsibleLayers = [
+  {
+    title: "Human-in-the-loop escalation",
+    body: "The model never acts as the final decision-maker. It routes a narrow incident packet to a guardian, who decides whether to call, lock, escalate, or unlock more context.",
+  },
+  {
+    title: "Data minimization by design",
+    body: "Signals are generated on-device. The parent console receives redacted evidence, app metadata, and timestamps rather than a full transcript archive.",
+  },
+  {
+    title: "False-positive containment",
+    body: "School-safe shielding and app allowlists suppress low-risk educational flows so the product does not spam guardians with ordinary classroom activity.",
+  },
+  {
+    title: "Age-appropriate response",
+    body: "The workflow is designed for younger children: calm guardian check-in, trusted-adult escalation, and app restrictions before any punitive or invasive action.",
+  },
+];
+
+const qualifierChecklist = [
+  "Clear problem statement tied to younger-child digital safety",
+  "Deployable product story instead of a one-screen classifier demo",
+  "Responsible AI posture with human review and privacy boundaries",
+  "Live functionality: scanning, routing, response logging, and family controls",
+  "Pitch-ready demo flow with setup story, product operation, and judge-facing differentiation",
+];
+
 const severityTone: Record<Severity, string> = {
   info: "border-[#93c5fd] bg-[#e0f2fe] text-[#0c4a6e]",
   watch: "border-[#facc15] bg-[#fef3c7] text-[#854d0e]",
@@ -236,7 +263,7 @@ const routeTone: Record<RouteStatus, string> = {
 
 export default function Home() {
   const [activeChildId, setActiveChildId] = useState(children[0].id);
-  const [tab, setTab] = useState<"command" | "family" | "deploy">("command");
+  const [tab, setTab] = useState<"command" | "family" | "responsible" | "deploy">("command");
   const [analysis, setAnalysis] = useState<AnalysisResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -513,6 +540,7 @@ export default function Home() {
                   {[
                     ["command", "Incident command"],
                     ["family", "Family policy"],
+                    ["responsible", "Responsible AI"],
                     ["deploy", "Deployment path"],
                   ].map(([value, label]) => (
                     <button
@@ -734,6 +762,56 @@ export default function Home() {
                         <BoundaryLine text="Phrase fragments only after on-device redaction" />
                         <BoundaryLine text="Guardian acknowledgement and escalation state" />
                         <BoundaryLine text={transcriptMode === "Redacted only" ? "No raw transcript sync leaves the device." : "Raw transcript unlock still requires an explicit guardian action."} />
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              ) : null}
+
+              {tab === "responsible" ? (
+                <div className="mt-5 grid gap-5 xl:grid-cols-[0.95fr_1.05fr]">
+                  <div className="space-y-5">
+                    <div className="rounded-[1.5rem] border border-[#dbe4ef] bg-[linear-gradient(135deg,_#eff6ff_0%,_#f8fafc_100%)] p-5">
+                      <div className="text-xs uppercase tracking-[0.22em] text-[#0f766e]">Responsible AI surface</div>
+                      <div className="mt-2 font-[var(--font-display)] text-3xl tracking-[-0.04em] text-[#0f172a]">Why this is safer than generic surveillance software</div>
+                      <div className="mt-4 grid gap-3">
+                        {responsibleLayers.map((layer) => (
+                          <StoryCard key={layer.title} title={layer.title} body={layer.body} />
+                        ))}
+                      </div>
+                    </div>
+
+                    <div className="rounded-[1.5rem] border border-[#dbe4ef] bg-white p-5">
+                      <div className="text-xs uppercase tracking-[0.22em] text-[#0f766e]">Judge checklist</div>
+                      <div className="mt-4 grid gap-3 text-sm leading-6 text-[#334155]">
+                        {qualifierChecklist.map((item) => (
+                          <div key={item} className="rounded-[1.1rem] border border-[#e5edf6] bg-[#f8fafc] px-4 py-4">
+                            {item}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="space-y-5">
+                    <div className="rounded-[1.5rem] border border-[#dbe4ef] bg-[#10243f] p-5 text-white">
+                      <div className="text-xs uppercase tracking-[0.22em] text-[#7dd3fc]">Model contract</div>
+                      <div className="mt-2 font-[var(--font-display)] text-3xl tracking-[-0.04em]">AI should narrow the incident, not take over the parent’s judgment</div>
+                      <div className="mt-4 grid gap-3 text-sm leading-6 text-[#dbeafe]">
+                        <BoundaryLine text="Classify patterns like secrecy, off-platform movement, reward leverage, and location requests." />
+                        <BoundaryLine text="Return only the minimum incident packet needed for a human to respond." />
+                        <BoundaryLine text="Avoid punitive automation and keep every high-stakes action guardian-controlled." />
+                        <BoundaryLine text="Log acknowledgement and escalation so family response stays coordinated." />
+                      </div>
+                    </div>
+
+                    <div className="rounded-[1.5rem] border border-[#dbe4ef] bg-[#fffdfa] p-5">
+                      <div className="text-xs uppercase tracking-[0.22em] text-[#0f766e]">Submission readiness</div>
+                      <div className="mt-2 font-[var(--font-display)] text-3xl tracking-[-0.04em] text-[#0f172a]">What still makes this stronger than the average hackathon build</div>
+                      <div className="mt-4 grid gap-3 text-sm leading-6 text-[#475569]">
+                        <StoryCard title="Original framing" body="This is not a generic moderation dashboard. It is a guardian operations network specifically designed around younger kids, trust boundaries, and calm intervention." />
+                        <StoryCard title="Operational depth" body="The project now covers setup, routing, acknowledgement, escalation, deployment kits, and policy controls instead of stopping at pattern classification." />
+                        <StoryCard title="Pitch clarity" body="The demo can tell a clean story from installation through incident response, which is the kind of product completeness judges reward." />
                       </div>
                     </div>
                   </div>

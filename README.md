@@ -19,7 +19,8 @@ The core product claim is not just detection. It is trustworthy escalation desig
 
 - `Guardian fleet`: multiple child devices with different install profiles
 - `Incident command`: parent dashboard with alert queue, redacted evidence, and response actions
-- `Family policy`: guardian roster, privacy boundaries, and escalation rules
+- `Family policy`: guardian roster, privacy boundaries, escalation timing, and configurable family controls
+- `Responsible AI`: explicit human-in-the-loop, data-minimization, and false-positive containment story
 - `Deployment path`: install kits for Apple family devices, Android family phones, and school-safe tablets
 
 ## Repo layout
