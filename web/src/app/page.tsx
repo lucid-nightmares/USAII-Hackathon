@@ -243,6 +243,10 @@ export default function Home() {
   const [actionLog, setActionLog] = useState<ActionEntry[]>([]);
   const [acknowledged, setAcknowledged] = useState<string[]>([]);
   const [selectedKit, setSelectedKit] = useState(installKits[0].id);
+  const [smsDelay, setSmsDelay] = useState<"3 min" | "5 min" | "10 min">("5 min");
+  const [transcriptMode, setTranscriptMode] = useState<"Redacted only" | "Guardian unlock required">("Redacted only");
+  const [schoolShield, setSchoolShield] = useState<"On" | "Off">("On");
+  const [deviceLock, setDeviceLock] = useState<"Allowed" | "Manual only">("Allowed");
 
   const activeChild = children.find((child) => child.id === activeChildId) ?? children[0];
   const activeEvents = useMemo(() => eventsByChild[activeChild.id] ?? [], [activeChild.id]);
@@ -686,9 +690,39 @@ export default function Home() {
                     <div className="rounded-[1.5rem] border border-[#dbe4ef] bg-[linear-gradient(135deg,_#fff7ed_0%,_#eff6ff_100%)] p-5">
                       <div className="text-xs uppercase tracking-[0.22em] text-[#0f766e]">Guardian roster</div>
                       <div className="mt-3 grid gap-3">
-                        <RosterCard name="Aditya" role="Primary guardian" note="Push immediately, can lock apps, receives all critical packets." />
-                        <RosterCard name="Backup family contact" role="Secondary guardian" note="SMS + email escalation if primary misses the acknowledgement window." />
-                        <RosterCard name="Teacher-safe channel" role="Optional support contact" note="School-safe summary only, disabled outside school incidents." />
+                        <RosterCard name="Aditya" role="Primary guardian" note={`Push immediately, ${deviceLock === "Allowed" ? "can lock apps" : "reviews before locking"}, receives all critical packets.`} />
+                        <RosterCard name="Backup family contact" role="Secondary guardian" note={`SMS + email escalation after ${smsDelay.toLowerCase()} if primary misses the acknowledgement window.`} />
+                        <RosterCard name="Teacher-safe channel" role="Optional support contact" note={`School-safe summary only, ${schoolShield === "On" ? "available during school incidents" : "currently disabled"}.`} />
+                      </div>
+                    </div>
+
+                    <div className="rounded-[1.5rem] border border-[#dbe4ef] bg-white p-5">
+                      <div className="text-xs uppercase tracking-[0.22em] text-[#0f766e]">Live family controls</div>
+                      <div className="mt-4 grid gap-4">
+                        <ControlGroup
+                          label="Fallback SMS delay"
+                          value={smsDelay}
+                          options={["3 min", "5 min", "10 min"]}
+                          onChange={(value) => setSmsDelay(value as "3 min" | "5 min" | "10 min")}
+                        />
+                        <ControlGroup
+                          label="Transcript visibility"
+                          value={transcriptMode}
+                          options={["Redacted only", "Guardian unlock required"]}
+                          onChange={(value) => setTranscriptMode(value as "Redacted only" | "Guardian unlock required")}
+                        />
+                        <ControlGroup
+                          label="School-hour shield"
+                          value={schoolShield}
+                          options={["On", "Off"]}
+                          onChange={(value) => setSchoolShield(value as "On" | "Off")}
+                        />
+                        <ControlGroup
+                          label="Emergency device lock"
+                          value={deviceLock}
+                          options={["Allowed", "Manual only"]}
+                          onChange={(value) => setDeviceLock(value as "Allowed" | "Manual only")}
+                        />
                       </div>
                     </div>
 
@@ -699,7 +733,7 @@ export default function Home() {
                         <BoundaryLine text="Risk score, app name, and timestamp for triage" />
                         <BoundaryLine text="Phrase fragments only after on-device redaction" />
                         <BoundaryLine text="Guardian acknowledgement and escalation state" />
-                        <BoundaryLine text="No raw transcript sync unless a parent explicitly unlocks more context" />
+                        <BoundaryLine text={transcriptMode === "Redacted only" ? "No raw transcript sync leaves the device." : "Raw transcript unlock still requires an explicit guardian action."} />
                       </div>
                     </div>
                   </div>
@@ -727,7 +761,7 @@ export default function Home() {
                         <li>2. The device registers approved messaging surfaces and local scanning rules.</li>
                         <li>3. Raw child messages stay local; only redacted incident packets sync upward.</li>
                         <li>4. Push reaches the primary guardian immediately when the threshold is crossed.</li>
-                        <li>5. Missed acknowledgement moves the incident into SMS, backup guardian, and email fallback.</li>
+                        <li>5. Missed acknowledgement moves the incident into SMS after {smsDelay.toLowerCase()}, then backup guardian and email fallback.</li>
                       </ol>
                     </div>
                   </div>
@@ -784,8 +818,8 @@ export default function Home() {
                 <div className="mt-4 grid gap-4 lg:grid-cols-2">
                   <FamilyStep number="01" title="Pick the right install kit" body="Choose Apple family kit, Android family agent, or school-safe tablet mode based on the child’s device." />
                   <FamilyStep number="02" title="Assign guardian routes" body="Decide who gets immediate push, who gets fallback SMS, and whether a second adult should receive critical incidents." />
-                  <FamilyStep number="03" title="Tune privacy defaults" body="Keep raw transcripts local, allow only redacted phrase fragments, and define the unlock path for serious incidents." />
-                  <FamilyStep number="04" title="Respond without panic" body="Use the response queue to acknowledge, call the child, temporarily lock an app, or escalate to another guardian." />
+                  <FamilyStep number="03" title="Tune privacy defaults" body={`Current mode: ${transcriptMode}. Parents get narrow evidence packets first and unlock more only if they choose to.`} />
+                  <FamilyStep number="04" title="Respond without panic" body={`Use the response queue to acknowledge, call the child, ${deviceLock === "Allowed" ? "temporarily lock an app" : "review before locking any app"}, or escalate to another guardian.`} />
                 </div>
                 <div className="mt-5 rounded-[1.2rem] border border-[#dbe4ef] bg-[#f8fafc] px-4 py-4 text-sm leading-6 text-[#475569]">
                   {analysis?.recommendation ?? "The system is tuned for calm escalation: alert the parent immediately when needed, but keep the evidence packet intentionally narrow until a guardian decides more context is necessary."}
@@ -901,6 +935,36 @@ function FamilyStep({ number, title, body }: { number: string; title: string; bo
       <div className="text-xs uppercase tracking-[0.18em] text-[#0f766e]">Step {number}</div>
       <div className="mt-2 font-medium text-[#0f172a]">{title}</div>
       <div className="mt-2 text-sm leading-6 text-[#475569]">{body}</div>
+    </div>
+  );
+}
+
+function ControlGroup({
+  label,
+  value,
+  options,
+  onChange,
+}: {
+  label: string;
+  value: string;
+  options: string[];
+  onChange: (value: string) => void;
+}) {
+  return (
+    <div className="rounded-[1.2rem] border border-[#e5edf6] bg-[#f8fafc] p-4">
+      <div className="text-xs uppercase tracking-[0.18em] text-[#64748b]">{label}</div>
+      <div className="mt-3 flex flex-wrap gap-2">
+        {options.map((option) => (
+          <button
+            key={option}
+            className={`rounded-full border px-3 py-2 text-sm transition ${value === option ? "border-[#10243f] bg-[#10243f] text-white" : "border-[#dbe4ef] bg-white text-[#10243f]"}`}
+            onClick={() => onChange(option)}
+            type="button"
+          >
+            {option}
+          </button>
+        ))}
+      </div>
     </div>
   );
 }
