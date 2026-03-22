@@ -4,24 +4,71 @@ $projectRoot = Split-Path -Parent $PSScriptRoot
 $repoRoot = Split-Path -Parent $projectRoot
 $deliverablesDir = Join-Path $repoRoot "deliverables"
 $outputPath = Join-Path $deliverablesDir "signalsafe_snapshot.html"
-$stdoutLog = Join-Path $projectRoot ".snapshot-server.stdout.log"
-$stderrLog = Join-Path $projectRoot ".snapshot-server.stderr.log"
+$tempPrefix = "signalsafe-snapshot-$(Get-Date -Format 'yyyyMMddHHmmssfff')"
+$stdoutLog = Join-Path $env:TEMP "$tempPrefix.stdout.log"
+$stderrLog = Join-Path $env:TEMP "$tempPrefix.stderr.log"
 $port = 3101
 $serverProcess = $null
 
+function New-StandaloneSnapshot {
+  param(
+    [string]$Html,
+    [string]$BaseUrl
+  )
+
+  $stylePattern = '<link[^>]+rel="stylesheet"[^>]+href="([^"]+)"[^>]*>'
+  $standaloneStyles = New-Object System.Collections.Generic.List[string]
+
+  foreach ($match in [regex]::Matches($Html, $stylePattern)) {
+    $href = $match.Groups[1].Value
+    if ($href.StartsWith("http")) {
+      $styleUrl = $href
+    } else {
+      $styleUrl = "$BaseUrl$href"
+    }
+
+    $styleResponse = Invoke-WebRequest -Uri $styleUrl -UseBasicParsing
+    $standaloneStyles.Add($styleResponse.Content)
+  }
+
+  $htmlWithoutStyles = [regex]::Replace($Html, $stylePattern, "")
+  $htmlWithoutPreloads = [regex]::Replace($htmlWithoutStyles, '<link[^>]+rel="preload"[^>]*>', "")
+  $htmlWithoutScripts = [regex]::Replace($htmlWithoutPreloads, '<script\b[^>]*>.*?</script>', "", [System.Text.RegularExpressions.RegexOptions]::Singleline)
+  $htmlWithoutHiddenReact = $htmlWithoutScripts.Replace('<div hidden=""><!--$--><!--/$--></div>', "")
+  $htmlWithoutFavicons = [regex]::Replace($htmlWithoutHiddenReact, '<link[^>]+rel="icon"[^>]*>', "")
+
+  $fallbackStyle = @"
+<style>
+html, body {
+  margin: 0;
+  min-height: 100%;
+  font-family: "Segoe UI", Inter, Arial, sans-serif;
+  background: #edf3fb;
+}
+
+body {
+  color: #0f172a;
+}
+</style>
+"@
+
+  $inlinedStyles = ($standaloneStyles | ForEach-Object { "<style>`n$_`n</style>" }) -join "`n"
+  $styleBlock = "$fallbackStyle`n$inlinedStyles"
+
+  return $htmlWithoutFavicons -replace '</head>', "$styleBlock`n</head>"
+}
+
 New-Item -ItemType Directory -Force -Path $deliverablesDir | Out-Null
-
-if (Test-Path $stdoutLog) {
-  Remove-Item $stdoutLog -Force
-}
-
-if (Test-Path $stderrLog) {
-  Remove-Item $stderrLog -Force
-}
 
 try {
   Write-Host "Building application..."
-  & npm run build
+  & npm.cmd run build
+
+  Get-NetTCPConnection -LocalPort $port -ErrorAction SilentlyContinue |
+    Select-Object -ExpandProperty OwningProcess -Unique |
+    ForEach-Object {
+      Stop-Process -Id $_ -Force -ErrorAction SilentlyContinue
+    }
 
   Write-Host "Starting temporary server on port $port..."
   $serverProcess = Start-Process `
@@ -38,7 +85,8 @@ try {
     try {
       $response = Invoke-WebRequest -Uri "http://127.0.0.1:$port" -UseBasicParsing
       if ($response.StatusCode -eq 200) {
-        $response.Content | Set-Content -Path $outputPath -Encoding utf8
+        $standaloneHtml = New-StandaloneSnapshot -Html $response.Content -BaseUrl "http://127.0.0.1:$port"
+        $standaloneHtml | Set-Content -Path $outputPath -Encoding utf8
         $ready = $true
         break
       }
@@ -57,5 +105,14 @@ try {
 } finally {
   if ($serverProcess -and -not $serverProcess.HasExited) {
     Stop-Process -Id $serverProcess.Id -Force
+  }
+
+  foreach ($tempLog in @($stdoutLog, $stderrLog)) {
+    if (Test-Path $tempLog) {
+      try {
+        Remove-Item $tempLog -Force
+      } catch {
+      }
+    }
   }
 }
