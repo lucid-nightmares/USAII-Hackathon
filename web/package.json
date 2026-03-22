@@ -6,7 +6,8 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "snapshot:html": "powershell -ExecutionPolicy Bypass -File .\\scripts\\export-html.ps1"
   },
   "dependencies": {
     "next": "16.2.1",

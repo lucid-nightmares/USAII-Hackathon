@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 
-type Severity = "info" | "watch" | "critical";
+type Severity = "info" | "watch" | "alert" | "critical";
+type RouteStatus = "armed" | "fallback" | "idle";
+type IncidentStage = "Detected" | "Redacted" | "Queued" | "Viewed" | "Acknowledged" | "Actioned" | "Resolved";
 
 type EventRecord = {
   id: string;
@@ -101,7 +103,10 @@ function severityFromScore(score: number): Severity {
   if (score >= 55) {
     return "critical";
   }
-  if (score >= 25) {
+  if (score >= 40) {
+    return "alert";
+  }
+  if (score >= 22) {
     return "watch";
   }
   return "info";
@@ -139,18 +144,73 @@ export async function POST(request: Request) {
       const severity = severityFromScore(score);
       const evidence = matchedRules.flatMap((item) => item.hits);
       const matchedTactics = matchedRules.map((item) => item.rule.label);
+      const contextSignals = dedupe(
+        [
+          event.app.includes("Messenger") ? "New contact channel" : null,
+          event.app.includes("Roblox") || event.app.includes("Minecraft") ? "Gaming chat" : null,
+          event.at.includes("PM") ? "Evening hours" : null,
+          matchedRules.length > 1 ? "Multiple signals in one event" : null,
+        ].filter((value): value is string => value !== null),
+      );
+
       const actionPlan =
         severity === "critical"
           ? [
-              "Open a calm guardian check-in immediately.",
-              "Confirm whether the child should stop using the app for now.",
-              "Escalate to the backup guardian if the primary misses the acknowledgement window.",
+              "Check in with the child now.",
+              "Pause the app until an adult reviews the contact.",
+              "Ask the backup adult to review if the first parent misses the alert.",
             ]
-          : [
-              "Review the redacted evidence with context from the child.",
-              "Watch for repeated contact or repeated reward pressure.",
-              "Adjust the app policy or contact permissions if the pattern continues.",
-            ];
+          : severity === "alert"
+            ? [
+                "Check in with the child soon.",
+                "Approve or block the contact before the chat continues.",
+                "Tighten the rule if the same pattern shows up again.",
+              ]
+            : [
+                "Review the short summary with the child later.",
+                "Watch for repeated contact or repeat reward pressure.",
+                "Adjust app rules if the same pattern keeps showing up.",
+              ];
+
+      const dignityModeEligible =
+        severity === "watch" ||
+        (severity === "alert" &&
+          !matchedRules.some((item) => ["secrecy", "location", "boundary-push"].includes(item.rule.id)) &&
+          score < 50);
+
+      const recommendedAction =
+        dignityModeEligible
+          ? "Start with a calm check-in. Keep the incident redacted unless the pattern repeats or grows stronger."
+          : severity === "critical"
+            ? "Pause the app and check in with the child now."
+            : severity === "alert"
+              ? "Review the contact and decide whether to block or tighten the rule."
+              : "Keep watching unless the same behavior repeats.";
+
+      const explanation =
+        severity === "critical"
+          ? "This event combines high-risk signals that should reach a parent quickly, but the parent still makes the final call."
+          : severity === "alert"
+            ? "This event may not need an immediate lock, but it carries enough risk that a parent should review it while context is fresh."
+            : "This event is being kept in view because it may become risky if the same pattern repeats.";
+
+      const confidence = severity === "critical" ? 94 : severity === "alert" ? 82 : severity === "watch" ? 68 : 52;
+      const routeStatus: RouteStatus = severity === "critical" ? "fallback" : severity === "alert" ? "armed" : "idle";
+      const incidentStage: IncidentStage = severity === "critical" || severity === "alert" ? "Queued" : "Redacted";
+      const escalationDeadline =
+        severity === "critical" ? "Escalate in 5 min" : severity === "alert" ? "Review in 20 min" : "Digest only";
+      const policyContext = dedupe(
+        [
+          event.at.includes("PM") ? "Evening routine active" : null,
+          event.app.includes("Messenger") ? "New-contact hold is active" : null,
+          event.app.includes("Chrome") ? "Browser shield filtered the page before sync" : null,
+          event.app.includes("Roblox") || event.app.includes("Minecraft") ? "Gaming-chat rules applied before escalation" : null,
+        ].filter((value): value is string => value !== null),
+      );
+      const revealSummary =
+        dignityModeEligible
+          ? "Low-confidence or context-sensitive case. Keep the packet redacted unless the pattern repeats."
+          : "A deeper reveal is available, but only after a guardian explicitly unlocks it.";
 
       return {
         id: event.id,
@@ -164,11 +224,24 @@ export async function POST(request: Request) {
         evidence,
         channels:
           severity === "critical"
-            ? ["Push now", "SMS in 5 min", "Backup guardian in 10 min"]
-            : ["Push digest", "Email summary"],
+            ? ["Push now", "SMS in 5 min", "Backup adult in 10 min"]
+            : severity === "alert"
+              ? ["Push now", "Dashboard queue", "Email backup"]
+              : ["Dashboard queue", "Daily digest"],
         actionPlan,
         app: event.app,
         matchedTactics,
+        contextSignals,
+        recommendedAction,
+        explanation,
+        confidence,
+        detectedAt: event.at,
+        incidentStage,
+        routeStatus,
+        escalationDeadline,
+        dignityModeEligible,
+        revealSummary,
+        policyContext,
       };
     })
     .filter((alert): alert is NonNullable<typeof alert> => alert !== null)
@@ -218,8 +291,10 @@ export async function POST(request: Request) {
     deliveryPlan,
     recommendation:
       overallRisk === "critical"
-        ? "For younger kids, the safest default is to notify the primary guardian immediately, preserve the transcript locally, and make escalation fast if the first alert is missed."
-        : "Keep the evidence packet narrow and give the parent context without normalizing full-time transcript surveillance.",
+        ? "For younger kids, the safest default is to notify the primary guardian immediately, keep the full transcript on-device, and make escalation fast if the first alert is missed."
+        : overallRisk === "alert"
+          ? "Keep the evidence packet narrow, put the event in front of a parent quickly, and let the adult decide the next step."
+          : "Keep the evidence packet narrow and give the parent context without normalizing full-time transcript surveillance.",
   };
 
   return NextResponse.json(response);

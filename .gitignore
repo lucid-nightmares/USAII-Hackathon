@@ -5,3 +5,5 @@ Microsoft/
 web/node_modules/
 web/.next/
 web/devserver.log
+web/.snapshot-server.stdout.log
+web/.snapshot-server.stderr.log
